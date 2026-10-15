@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flipclock.App/Flipclock.App.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/Flipclock.Core/Flipclock.Core.csproj" />
+    <Project Path="src/Flipclock.Rendering/Flipclock.Rendering.csproj">
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flipclock.Core.Tests/Flipclock.Core.Tests.csproj" />
+  </Folder>
+</Solution>
