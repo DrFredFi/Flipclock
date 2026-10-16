@@ -12,31 +12,41 @@
             <KeyboardAccelerator Key="B" Modifiers="Control" Invoked="OnBorderlessAccelerator" />
             <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
         </Grid.KeyboardAccelerators>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
 
-        <SwapChainPanel x:Name="ClockPanel" SizeChanged="OnPanelSizeChanged" CompositionScaleChanged="OnCompositionScaleChanged" />
+        <!-- The clock area shrinks while the settings panel is open, so the panel never covers the clock. -->
+        <Grid x:Name="ClockArea">
+            <SwapChainPanel x:Name="ClockPanel" SizeChanged="OnPanelSizeChanged" CompositionScaleChanged="OnCompositionScaleChanged" />
 
-        <!-- Transparent layer that receives clicks over the clock (drag / double-click). -->
-        <Grid x:Name="InputLayer" Background="Transparent" DoubleTapped="OnInputDoubleTapped" />
+            <!-- Transparent layer that receives clicks over the clock (drag / double-click). -->
+            <Grid x:Name="InputLayer" Background="Transparent" DoubleTapped="OnInputDoubleTapped" />
 
-        <TextBlock x:Name="DateText" IsHitTestVisible="False" VerticalAlignment="Top" TextWrapping="NoWrap" />
+            <TextBlock x:Name="DateText" IsHitTestVisible="False" VerticalAlignment="Top" TextWrapping="NoWrap" />
 
-        <InfoBar x:Name="WarningBar" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12" MaxWidth="640"
-                 Severity="Warning" IsOpen="False" />
+            <InfoBar x:Name="WarningBar" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12" MaxWidth="640"
+                     Severity="Warning" IsOpen="False" />
 
-        <Button x:Name="CogButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12"
-                Width="44" Height="44" Padding="0" CornerRadius="22" Click="OnCogClick"
-                Background="#40000000" BorderThickness="0"
-                AutomationProperties.Name="{x:Bind L.Settings}" ToolTipService.ToolTip="{x:Bind L.Settings}">
-            <FontIcon Glyph="&#xE713;" FontSize="18" Foreground="White" />
-            <Button.OpacityTransition>
-                <ScalarTransition Duration="0:0:0.4" />
-            </Button.OpacityTransition>
-        </Button>
+            <Button x:Name="CogButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12"
+                    Width="44" Height="44" Padding="0" CornerRadius="22" Click="OnCogClick"
+                    Background="#40000000" BorderThickness="0"
+                    AutomationProperties.Name="{x:Bind L.Settings}" ToolTipService.ToolTip="{x:Bind L.Settings}">
+                <FontIcon Glyph="&#xE713;" FontSize="18" Foreground="White" />
+                <Button.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.4" />
+                </Button.OpacityTransition>
+            </Button>
+        </Grid>
 
-        <local:SettingsPanel x:Name="Settings" Width="360" HorizontalAlignment="Right" Visibility="Collapsed">
-            <local:SettingsPanel.RenderTransform>
-                <TranslateTransform x:Name="SettingsShift" X="360" />
-            </local:SettingsPanel.RenderTransform>
-        </local:SettingsPanel>
+        <!-- Host width animates 0 ↔ panel width; the panel slides in step with it. -->
+        <Grid x:Name="SettingsHost" Grid.Column="1" Width="0">
+            <local:SettingsPanel x:Name="Settings" Width="360" HorizontalAlignment="Left" Visibility="Collapsed">
+                <local:SettingsPanel.RenderTransform>
+                    <TranslateTransform x:Name="SettingsShift" X="360" />
+                </local:SettingsPanel.RenderTransform>
+            </local:SettingsPanel>
+        </Grid>
     </Grid>
 </Window>

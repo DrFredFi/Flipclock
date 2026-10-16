@@ -33,6 +33,7 @@ public sealed partial class MainWindow : Window
     bool _renderingHooked;
     bool _renderQueued;
     bool _panelOpen;
+    Storyboard? _panelStoryboard;
     DateTime _shownDate;
     long _lastPressTicks;
     double _scaleX = 1, _scaleY = 1;
@@ -221,7 +222,7 @@ public sealed partial class MainWindow : Window
         DateText.Visibility = s.DateVisible ? Visibility.Visible : Visibility.Collapsed;
         if (!s.DateVisible) return;
 
-        double w = Root.ActualWidth, h = Root.ActualHeight;
+        double w = ClockArea.ActualWidth, h = ClockArea.ActualHeight;
         if (w <= 0 || h <= 0) return;
         var layout = ClockLayout.Compute(w, h, s.Margin, s.SecondsScale, s.DateSize);
 
@@ -327,14 +328,14 @@ public sealed partial class MainWindow : Window
         Settings.SetWindowState(_windowController!.IsAlwaysOnTop, _windowController.IsBorderless, _windowController.IsFullscreen);
         Settings.Visibility = Visibility.Visible;
         CogButton.Visibility = Visibility.Collapsed;
-        AnimatePanel(0, null);
+        AnimatePanel(open: true, null);
     }
 
     void ClosePanel()
     {
         if (!_panelOpen) return;
         _panelOpen = false;
-        AnimatePanel(Settings.Width, () =>
+        AnimatePanel(open: false, () =>
         {
             if (!_panelOpen) Settings.Visibility = Visibility.Collapsed;
         });
@@ -342,18 +343,38 @@ public sealed partial class MainWindow : Window
         _cogTimer?.Start();
     }
 
-    void AnimatePanel(double to, Action? completed)
+    /// <summary>
+    /// Opens the panel's column (pushing the clock left) while sliding the panel in, or the reverse.
+    /// </summary>
+    void AnimatePanel(bool open, Action? completed)
     {
-        var animation = new DoubleAnimation
+        // Stop() reverts to the base values, so pin them to where a running animation currently is.
+        double current = SettingsHost.ActualWidth;
+        _panelStoryboard?.Stop();
+        SettingsHost.Width = current;
+        SettingsShift.X = Settings.Width - current;
+
+        double width = open ? Settings.Width : 0;
+        var duration = new Duration(TimeSpan.FromMilliseconds(220));
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var hostAnimation = new DoubleAnimation { To = width, Duration = duration, EasingFunction = easing, EnableDependentAnimation = true };
+        Storyboard.SetTarget(hostAnimation, SettingsHost);
+        Storyboard.SetTargetProperty(hostAnimation, "Width");
+        var shiftAnimation = new DoubleAnimation { To = Settings.Width - width, Duration = duration, EasingFunction = easing };
+        Storyboard.SetTarget(shiftAnimation, SettingsShift);
+        Storyboard.SetTargetProperty(shiftAnimation, "X");
+
+        var storyboard = new Storyboard { Children = { hostAnimation, shiftAnimation } };
+        storyboard.Completed += (_, _) =>
         {
-            To = to,
-            Duration = new Duration(TimeSpan.FromMilliseconds(220)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            if (_panelStoryboard != storyboard) return;
+            _panelStoryboard = null;
+            storyboard.Stop();
+            SettingsHost.Width = width;
+            SettingsShift.X = Settings.Width - width;
+            completed?.Invoke();
         };
-        Storyboard.SetTarget(animation, SettingsShift);
-        Storyboard.SetTargetProperty(animation, "X");
-        var storyboard = new Storyboard { Children = { animation } };
-        if (completed is not null) storyboard.Completed += (_, _) => completed();
+        _panelStoryboard = storyboard;
         storyboard.Begin();
     }
 

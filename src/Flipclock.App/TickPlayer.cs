@@ -1,4 +1,5 @@
 using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
@@ -7,6 +8,8 @@ namespace Flipclock.App;
 /// <summary>
 /// Plays the tick with low latency. The sound is decoded once into memory and mixed into an
 /// always-open WASAPI stream, so a tick starts within a few milliseconds of being requested.
+/// The stream follows the default output device: when it changes (headphones plugged in,
+/// Bluetooth connected) or the stream dies, it is reopened before the next tick.
 /// </summary>
 public sealed class TickPlayer : IDisposable
 {
@@ -14,24 +17,54 @@ public sealed class TickPlayer : IDisposable
     static readonly WaveFormat MixFormat = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, 2);
 
     readonly MixingSampleProvider _mixer = new(MixFormat) { ReadFully = true };
+    readonly MMDeviceEnumerator? _devices;
+    readonly DeviceWatcher? _watcher;
     WasapiOut? _output;
+    volatile bool _stale = true;
     float[] _samples = Synthesize();
 
     public TickPlayer()
     {
         try
         {
+            _devices = new MMDeviceEnumerator();
+            _watcher = new DeviceWatcher(() => _stale = true);
+            _devices.RegisterEndpointNotificationCallback(_watcher);
+        }
+        catch (Exception)
+        {
+            // Without notifications the stream is only reopened when it stops.
+        }
+        EnsureOutput();
+    }
+
+    /// <summary>(Re)opens the output stream if the device changed or the stream stopped.</summary>
+    void EnsureOutput()
+    {
+        if (!_stale) return;
+        _stale = false;
+        if (_output is not null)
+        {
+            _output.PlaybackStopped -= OnPlaybackStopped;
+            _output.Dispose();
+            _output = null;
+        }
+        try
+        {
             _output = new WasapiOut(AudioClientShareMode.Shared, true, 40);
+            _output.PlaybackStopped += OnPlaybackStopped;
             _output.Init(_mixer);
             _output.Play();
         }
         catch (Exception)
         {
-            // No audio device: ticks are silently skipped.
+            // No audio device: ticks are silently skipped until one appears.
             _output?.Dispose();
             _output = null;
         }
     }
+
+    void OnPlaybackStopped(object? sender, StoppedEventArgs e) => _stale = true;
 
     /// <summary>Loads a custom sound, or the built-in tick when the path is empty. Returns false if the file could not be used.</summary>
     public bool Load(string? path)
@@ -67,7 +100,9 @@ public sealed class TickPlayer : IDisposable
 
     public void Play(double volume)
     {
-        if (_output is null || volume <= 0) return;
+        if (volume <= 0) return;
+        EnsureOutput();
+        if (_output is null) return;
         var input = new VolumeSampleProvider(new BufferSampleProvider(_samples)) { Volume = (float)Math.Clamp(volume, 0, 1) };
         _mixer.AddMixerInput(input);
     }
@@ -93,9 +128,25 @@ public sealed class TickPlayer : IDisposable
 
     public void Dispose()
     {
+        if (_watcher is not null) _devices?.UnregisterEndpointNotificationCallback(_watcher);
+        _devices?.Dispose();
+        if (_output is not null) _output.PlaybackStopped -= OnPlaybackStopped;
         _output?.Stop();
         _output?.Dispose();
         _output = null;
+    }
+
+    /// <summary>Flags the stream as stale when the default render device changes or devices come and go.</summary>
+    sealed class DeviceWatcher(Action changed) : IMMNotificationClient
+    {
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+        {
+            if (flow == DataFlow.Render && role == Role.Multimedia) changed();
+        }
+        public void OnDeviceAdded(string pwstrDeviceId) => changed();
+        public void OnDeviceRemoved(string deviceId) => changed();
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState) => changed();
+        public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }
 
     sealed class BufferSampleProvider(float[] samples) : ISampleProvider

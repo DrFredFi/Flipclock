@@ -132,7 +132,20 @@ public sealed class WindowController : IDisposable
     void ApplyOverlappedChrome()
     {
         // Borderless keeps a resizable frame (so the edges still resize) but drops the title bar.
-        _overlapped.SetBorderAndTitleBar(true, !IsBorderless);
+        // OverlappedPresenter.SetBorderAndTitleBar(true, false) cannot be undone (turning the title bar
+        // back on only restores the caption buttons), so the title bar is collapsed through AppWindow instead.
+        // PreferredHeightOption can only be set while the content extends into the title bar.
+        var titleBar = _appWindow.TitleBar;
+        if (IsBorderless)
+        {
+            titleBar.ExtendsContentIntoTitleBar = true;
+            titleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+        }
+        else if (titleBar.ExtendsContentIntoTitleBar)
+        {
+            titleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+            titleBar.ExtendsContentIntoTitleBar = false;
+        }
         _overlapped.IsAlwaysOnTop = IsAlwaysOnTop;
     }
 
