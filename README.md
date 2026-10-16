@@ -2,6 +2,8 @@
 
 A realistic **3D split-flap desktop clock** for Windows.
 
+![Flipclock in action](docs/flipclock.gif)
+
 Flipclock renders a six-tile `HH:mm:ss` clock in real 3D: rounded, bevelled tiles with visible thickness, a split gap and hinge pins, lit by a movable light and casting soft shadows onto the background. Every second the changing tiles flip like a real mechanical clock: the top flap rotates down on its hinge, shows the new digit on its back and settles with a small bounce. A mechanical *tick* plays when the flap lands.
 
 The app is built to sit on a second monitor, a TV or a corner of the desktop. You can run it fullscreen, borderless or always-on-top, and almost every visual detail can be changed from a live settings panel.
