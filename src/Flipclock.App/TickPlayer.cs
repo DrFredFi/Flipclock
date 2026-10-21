@@ -98,13 +98,42 @@ public sealed class TickPlayer : IDisposable
         }
     }
 
-    public void Play(double volume)
+    public void Play(double volume) => Mix(_samples, volume);
+
+    /// <summary>The countdown alarm: three bursts of four short beeps.</summary>
+    public void PlayAlarm(double volume) => Mix(Alarm, volume);
+
+    void Mix(float[] samples, double volume)
     {
         if (volume <= 0) return;
         EnsureOutput();
         if (_output is null) return;
-        var input = new VolumeSampleProvider(new BufferSampleProvider(_samples)) { Volume = (float)Math.Clamp(volume, 0, 1) };
+        var input = new VolumeSampleProvider(new BufferSampleProvider(samples)) { Volume = (float)Math.Clamp(volume, 0, 1) };
         _mixer.AddMixerInput(input);
+    }
+
+    static readonly float[] Alarm = SynthesizeAlarm();
+
+    static float[] SynthesizeAlarm()
+    {
+        const double Beep = 0.08, BeepGap = 0.07, BurstGap = 0.45;
+        double burst = 4 * (Beep + BeepGap);
+        int length = (int)(SampleRate * 3 * (burst + BurstGap));
+        var data = new float[length * 2];
+        for (int i = 0; i < length; i++)
+        {
+            double t = (double)i / SampleRate % (burst + BurstGap);
+            if (t >= burst) continue;
+            double b = t % (Beep + BeepGap);
+            if (b >= Beep) continue;
+            // Short fades at both ends keep the square-ish beep free of clicks.
+            double envelope = Math.Min(1, Math.Min(b, Beep - b) / 0.004);
+            double tone = Math.Sin(2 * Math.PI * 2000 * b) * 0.8 + Math.Sin(2 * Math.PI * 4000 * b) * 0.2;
+            float s = (float)(tone * envelope * 0.6);
+            data[i * 2] = s;
+            data[i * 2 + 1] = s;
+        }
+        return data;
     }
 
     /// <summary>The built-in tick: a short mechanical click (a noise transient plus two damped resonances).</summary>
