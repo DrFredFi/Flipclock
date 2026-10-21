@@ -75,6 +75,16 @@ public sealed class Strings
     public required string Reset { get; init; }
     public required string Cancel { get; init; }
 
+    public required string Countdown { get; init; }
+    public required string BackToClock { get; init; }
+    public required string Start { get; init; }
+    public required string Pause { get; init; }
+    public required string Continue { get; init; }
+    public required string CountdownDescription { get; init; }
+    public required string DigitUp { get; init; }
+    public required string DigitDown { get; init; }
+    public required string CountdownFinished { get; init; }
+
     public required string TrayShowHide { get; init; }
     public required string TrayMuteTick { get; init; }
     public required string TrayExit { get; init; }
@@ -109,6 +119,8 @@ public sealed class Strings
         Browse = "Browse…", Clear = "Clear", ResetDefaults = "Reset to defaults",
         ResetConfirmTitle = "Reset to defaults?", ResetConfirmBody = "All appearance, sound and animation settings return to their defaults.",
         Reset = "Reset", Cancel = "Cancel",
+        Countdown = "Countdown", BackToClock = "Clock", Start = "Start", Pause = "Pause", Continue = "Continue",
+        CountdownDescription = "Description…", DigitUp = "Increase", DigitDown = "Decrease", CountdownFinished = "Countdown finished",
         TrayShowHide = "Show / Hide", TrayMuteTick = "Mute tick", TrayExit = "Exit",
         ConfigNotWritableTitle = "Settings will not be saved",
         ConfigNotWritableBody = "The folder containing Flipclock is not writable. Move the app to a writable folder to keep your settings.",
@@ -133,6 +145,8 @@ public sealed class Strings
         Browse = "Sfoglia…", Clear = "Rimuovi", ResetDefaults = "Ripristina predefiniti",
         ResetConfirmTitle = "Ripristinare i predefiniti?", ResetConfirmBody = "Tutte le impostazioni di aspetto, suono e animazione tornano ai valori predefiniti.",
         Reset = "Ripristina", Cancel = "Annulla",
+        Countdown = "Conto alla rovescia", BackToClock = "Orologio", Start = "Avvia", Pause = "Pausa", Continue = "Continua",
+        CountdownDescription = "Descrizione…", DigitUp = "Aumenta", DigitDown = "Diminuisci", CountdownFinished = "Conto alla rovescia terminato",
         TrayShowHide = "Mostra / Nascondi", TrayMuteTick = "Silenzia tic", TrayExit = "Esci",
         ConfigNotWritableTitle = "Le impostazioni non verranno salvate",
         ConfigNotWritableBody = "La cartella di Flipclock non è scrivibile. Sposta l'applicazione in una cartella scrivibile per conservare le impostazioni.",

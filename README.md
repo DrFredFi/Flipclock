@@ -108,10 +108,18 @@ The executable is written to `src/Flipclock.App/bin/x64/Release/net10.0-windows1
 The app is **unpackaged and self-contained**, so the published folder runs on any machine without installing .NET or the Windows App SDK:
 
 ```powershell
-dotnet publish src/Flipclock.App/Flipclock.App.csproj -c Release -p:Platform=x64 -r win-x64 -o publish/win-x64
+.\publish.ps1                                  # tests, then publishes to .\publish
+.\publish.ps1 -Output D:\Tools\Flipclock      # anywhere else
+.\publish.ps1 -Platform ARM64 -Clean          # ARM64, emptying the folder first
 ```
 
-Zip the folder and put it anywhere **writable**, because `config.toml` is saved next to the executable. For ARM64, use `-p:Platform=ARM64 -r win-arm64`.
+An existing `config.toml` in the output folder is always kept, so republishing over an installed copy keeps its settings. `-SkipTests` skips the tests. The script wraps:
+
+```powershell
+dotnet publish src/Flipclock.App/Flipclock.App.csproj -c Release -p:Platform=x64 -r win-x64 -o publish
+```
+
+Zip the folder and put it anywhere **writable**, because `config.toml` is saved next to the executable.
 
 ### Run the tests
 

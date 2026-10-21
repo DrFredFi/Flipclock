@@ -6,7 +6,7 @@
     xmlns:local="using:Flipclock.App"
     Title="Flipclock">
 
-    <Grid x:Name="Root" Background="Black" PointerMoved="OnPointerActivity" PointerPressed="OnRootPointerPressed">
+    <Grid x:Name="Root" Background="Black" PointerMoved="OnPointerActivity" PointerPressed="OnRootPointerPressed" PreviewKeyDown="OnRootPreviewKeyDown">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="F11" Invoked="OnFullscreenAccelerator" />
             <KeyboardAccelerator Key="B" Modifiers="Control" Invoked="OnBorderlessAccelerator" />
@@ -18,7 +18,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- The clock area shrinks while the settings panel is open, so the panel never covers the clock. -->
-        <Grid x:Name="ClockArea">
+        <Grid x:Name="ClockArea" PointerWheelChanged="OnClockWheel">
             <SwapChainPanel x:Name="ClockPanel" SizeChanged="OnPanelSizeChanged" CompositionScaleChanged="OnCompositionScaleChanged" />
 
             <!-- Transparent layer that receives clicks over the clock (drag / double-click). -->
@@ -26,18 +26,90 @@
 
             <TextBlock x:Name="DateText" IsHitTestVisible="False" VerticalAlignment="Top" TextWrapping="NoWrap" />
 
+            <!-- Countdown mode: arrows around the tiles, description above, controls below. Positioned from CountdownLayout. -->
+            <Grid x:Name="CountdownLayer" Visibility="Collapsed">
+                <Canvas x:Name="ArrowCanvas" />
+                <Border x:Name="TileHighlight" IsHitTestVisible="False" BorderThickness="2" CornerRadius="6"
+                        HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" />
+
+                <Grid x:Name="DescriptionHost" VerticalAlignment="Top">
+                    <TextBox x:Name="DescriptionBox" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                             BorderThickness="0,0,0,1" MaxLength="80"
+                             PlaceholderText="{x:Bind L.CountdownDescription}" AutomationProperties.Name="{x:Bind L.CountdownDescription}"
+                             TextChanged="OnDescriptionChanged" KeyDown="OnDescriptionKeyDown">
+                        <!-- Lightweight styling: the box stays see-through in every state; foregrounds follow the date color. -->
+                        <TextBox.Resources>
+                            <SolidColorBrush x:Key="TextControlBackground" Color="#20FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#30FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#30FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#60FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#90FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#C0FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlForeground" Color="White" />
+                            <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="White" />
+                            <SolidColorBrush x:Key="TextControlForegroundFocused" Color="White" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#90FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#90FFFFFF" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#70FFFFFF" />
+                        </TextBox.Resources>
+                    </TextBox>
+                    <TextBlock x:Name="DescriptionText" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                </Grid>
+
+                <Grid x:Name="ControlsHost" VerticalAlignment="Top">
+                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel.Resources>
+                            <Style x:Key="CountdownControl" TargetType="Button">
+                                <Setter Property="Height" Value="40" />
+                                <Setter Property="Padding" Value="18,0" />
+                                <Setter Property="CornerRadius" Value="20" />
+                                <Setter Property="Background" Value="#40FFFFFF" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderThickness" Value="0" />
+                            </Style>
+                        </StackPanel.Resources>
+                        <Button x:Name="StartButton" Style="{StaticResource CountdownControl}" Click="OnStartClick" AutomationProperties.Name="{x:Bind L.Start}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="16" />
+                                <TextBlock Text="{x:Bind L.Start}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ResetButton" Style="{StaticResource CountdownControl}" Click="OnResetClick" AutomationProperties.Name="{x:Bind L.Reset}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                                <TextBlock Text="{x:Bind L.Reset}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="PauseButton" Style="{StaticResource CountdownControl}" Click="OnPauseClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon x:Name="PauseIcon" Glyph="&#xE769;" FontSize="16" />
+                                <TextBlock x:Name="PauseLabel" Text="{x:Bind L.Pause}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
             <InfoBar x:Name="WarningBar" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12" MaxWidth="640"
                      Severity="Warning" IsOpen="False" />
 
-            <Button x:Name="CogButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12"
-                    Width="44" Height="44" Padding="0" CornerRadius="22" Click="OnCogClick"
-                    Background="#40000000" BorderThickness="0"
-                    AutomationProperties.Name="{x:Bind L.Settings}" ToolTipService.ToolTip="{x:Bind L.Settings}">
-                <FontIcon Glyph="&#xE713;" FontSize="18" Foreground="White" />
-                <Button.OpacityTransition>
+            <!-- Shown on mouse activity, faded out after a few seconds of stillness. -->
+            <StackPanel x:Name="TopButtons" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12">
+                <StackPanel.OpacityTransition>
                     <ScalarTransition Duration="0:0:0.4" />
-                </Button.OpacityTransition>
-            </Button>
+                </StackPanel.OpacityTransition>
+                <Button x:Name="CountdownButton" Width="44" Height="44" Padding="0" CornerRadius="22" Click="OnCountdownClick"
+                        Background="#40000000" BorderThickness="0"
+                        AutomationProperties.Name="{x:Bind L.Countdown}" ToolTipService.ToolTip="{x:Bind L.Countdown}">
+                    <FontIcon x:Name="CountdownIcon" Glyph="&#xE916;" FontSize="18" Foreground="White" />
+                </Button>
+                <Button x:Name="CogButton" Width="44" Height="44" Padding="0" CornerRadius="22" Click="OnCogClick"
+                        Background="#40000000" BorderThickness="0"
+                        AutomationProperties.Name="{x:Bind L.Settings}" ToolTipService.ToolTip="{x:Bind L.Settings}">
+                    <FontIcon Glyph="&#xE713;" FontSize="18" Foreground="White" />
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Host width animates 0 ↔ panel width; the panel slides in step with it. -->

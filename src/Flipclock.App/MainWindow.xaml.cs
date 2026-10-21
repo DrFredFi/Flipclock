@@ -1,15 +1,20 @@
 using System.Diagnostics;
 using Flipclock.Core.Clock;
 using Flipclock.Core.Settings;
+using Flipclock.Core.Timers;
 using Flipclock.Rendering;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Polygon = Microsoft.UI.Xaml.Shapes.Polygon;
+using VirtualKey = Windows.System.VirtualKey;
 using Windows.UI.Text;
 
 namespace Flipclock.App;
@@ -27,7 +32,17 @@ public sealed partial class MainWindow : Window
     WindowController? _windowController;
     TrayIcon? _tray;
 
-    DispatcherQueueTimer? _secondTimer, _tickTimer, _saveTimer, _cogTimer;
+    // Countdowns live for the session only: nothing about them is saved.
+    readonly CountdownCollection _countdowns = new();
+    readonly RepeatButton[] _upArrows = new RepeatButton[ClockDigits.Count];
+    readonly RepeatButton[] _downArrows = new RepeatButton[ClockDigits.Count];
+    Countdown? _countdown;
+    CountdownLayoutResult? _countdownLayout;
+    bool _countdownMode;
+    bool _blinkOff;
+    int _selectedTile = -1;
+
+    DispatcherQueueTimer? _secondTimer, _tickTimer, _saveTimer, _cogTimer, _countdownTimer, _blinkTimer;
     bool _writable;
     bool _warnedSaveFailure;
     bool _renderingHooked;
@@ -89,13 +104,21 @@ public sealed partial class MainWindow : Window
         _cogTimer = queue.CreateTimer();
         _cogTimer.IsRepeating = false;
         _cogTimer.Interval = TimeSpan.FromSeconds(3);
-        _cogTimer.Tick += (_, _) => { if (!_panelOpen) CogButton.Opacity = 0; };
+        _cogTimer.Tick += (_, _) => { if (!_panelOpen) TopButtons.Opacity = 0; };
+        _countdownTimer = queue.CreateTimer();
+        _countdownTimer.IsRepeating = false;
+        _countdownTimer.Tick += (_, _) => OnCountdownTick();
+        _blinkTimer = queue.CreateTimer();
+        _blinkTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _blinkTimer.Tick += (_, _) => { _blinkOff = !_blinkOff; RequestRender(); };
+        BuildArrows();
         ScheduleNextSecond();
         _cogTimer.Start();
 
         _tray = new TrayIcon(_windowController, this);
         _tray.MuteChanged += muted => { _settings.SoundEnabled = !muted; Settings.Load(_settings); ScheduleSave(); };
         _tray.SettingsRequested += () => { _windowController.Show(); OpenPanel(); };
+        _tray.CountdownRequested += () => { _windowController.Show(); EnterCountdown(); };
         _tray.ExitRequested += Close;
         _windowController.MinimizedToTray += (_, _) => _tray.Refresh(_settings.SoundEnabled);
         _tray.Refresh(_settings.SoundEnabled);
@@ -127,7 +150,7 @@ public sealed partial class MainWindow : Window
     void OnSecond()
     {
         var now = DateTime.Now;
-        StartFlip(ClockDigits.FromTime(now), flipAll: false);
+        if (!_countdownMode) StartFlip(ClockDigits.FromTime(now), flipAll: false);
         if (now.Date != _shownDate)
         {
             _shownDate = now.Date;
@@ -189,6 +212,9 @@ public sealed partial class MainWindow : Window
     {
         if (_renderer is null || _windowController is { IsVisible: false }) return;
         _scene.ApplySettings(_settings, _scaleX);
+        if (_countdownMode && _countdownLayout is { } countdownLayout) _scene.MarginPx = countdownLayout.Margin * _scaleX;
+        // A finished countdown blinks by drawing its digits in the tile color.
+        if (_blinkOff) _scene.DigitColor = _scene.TileColor;
         for (int i = 0; i < ClockDigits.Count; i++) _scene.Tiles[i] = _animator.GetVisual(i, nowMs);
         if (!_renderer.Render(_scene))
         {
@@ -213,14 +239,16 @@ public sealed partial class MainWindow : Window
         _scaleY = ClockPanel.CompositionScaleY;
         _renderer?.Resize((int)Math.Ceiling(ClockPanel.ActualWidth * _scaleX), (int)Math.Ceiling(ClockPanel.ActualHeight * _scaleY), (float)_scaleX, (float)_scaleY);
         UpdateDate();
+        LayoutCountdown();
         RenderFrame(_clock.Elapsed.TotalMilliseconds);
     }
 
     void UpdateDate()
     {
         var s = _settings;
-        DateText.Visibility = s.DateVisible ? Visibility.Visible : Visibility.Collapsed;
-        if (!s.DateVisible) return;
+        bool visible = s.DateVisible && !_countdownMode;
+        DateText.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) return;
 
         double w = ClockArea.ActualWidth, h = ClockArea.ActualHeight;
         if (w <= 0 || h <= 0) return;
@@ -271,7 +299,10 @@ public sealed partial class MainWindow : Window
         if (change.HasFlag(SettingsChange.Sound))
             _ticks.Load(_settings.SoundFile);
         if (change.HasFlag(SettingsChange.Date) || change.HasFlag(SettingsChange.Layout))
+        {
             UpdateDate();
+            LayoutCountdown();
+        }
         _tray?.Refresh(_settings.SoundEnabled);
         RequestRender();
         ScheduleSave();
@@ -324,7 +355,7 @@ public sealed partial class MainWindow : Window
     {
         if (_panelOpen) return;
         _panelOpen = true;
-        CogButton.Opacity = 1;
+        TopButtons.Opacity = 1;
         Settings.SetWindowState(_windowController!.IsAlwaysOnTop, _windowController.IsBorderless, _windowController.IsFullscreen);
         Settings.Visibility = Visibility.Visible;
         CogButton.Visibility = Visibility.Collapsed;
@@ -380,9 +411,320 @@ public sealed partial class MainWindow : Window
 
     void OnPointerActivity(object sender, PointerRoutedEventArgs e)
     {
-        CogButton.Opacity = 1;
+        TopButtons.Opacity = 1;
         _cogTimer?.Stop();
         _cogTimer?.Start();
+    }
+
+    // ---------------------------------------------------------------- countdown
+
+    void OnCountdownClick(object sender, RoutedEventArgs e)
+    {
+        if (_countdownMode) ExitCountdown();
+        else EnterCountdown();
+    }
+
+    void EnterCountdown()
+    {
+        if (_countdownMode) return;
+        _countdownMode = true;
+        _countdown ??= _countdowns.Add();
+        CountdownLayer.Visibility = Visibility.Visible;
+        CountdownIcon.Glyph = "";
+        ToolTipService.SetToolTip(CountdownButton, L.BackToClock);
+        AutomationProperties.SetName(CountdownButton, L.BackToClock);
+        DescriptionBox.Text = _countdown.Description;
+        UpdateDate();
+        LayoutCountdown();
+        RefreshCountdown();
+        StartFlip(_countdown.Digits(_clock.Elapsed.TotalMilliseconds), flipAll: false);
+        RequestRender();
+    }
+
+    /// <summary>Back to the clock; running countdowns keep going in the background.</summary>
+    void ExitCountdown()
+    {
+        if (!_countdownMode) return;
+        _countdownMode = false;
+        CountdownLayer.Visibility = Visibility.Collapsed;
+        CountdownIcon.Glyph = "";
+        ToolTipService.SetToolTip(CountdownButton, L.Countdown);
+        AutomationProperties.SetName(CountdownButton, L.Countdown);
+        _selectedTile = -1;
+        RefreshCountdown();
+        UpdateDate();
+        StartFlip(ClockDigits.FromTime(DateTime.Now), flipAll: false);
+        RequestRender();
+    }
+
+    void StartCountdown()
+    {
+        if (_countdown is not { CanStart: true }) return;
+        _countdown.Start(_clock.Elapsed.TotalMilliseconds);
+        CountdownButton.Focus(FocusState.Programmatic);
+        ScheduleCountdown();
+        RefreshCountdown();
+    }
+
+    void OnStartClick(object sender, RoutedEventArgs e) => StartCountdown();
+
+    void OnPauseClick(object sender, RoutedEventArgs e)
+    {
+        if (_countdown is null) return;
+        double nowMs = _clock.Elapsed.TotalMilliseconds;
+        if (_countdown.State == CountdownState.Running) _countdown.Pause(nowMs);
+        else _countdown.Resume(nowMs);
+        ScheduleCountdown();
+        RefreshCountdown();
+    }
+
+    void OnResetClick(object sender, RoutedEventArgs e)
+    {
+        if (_countdown is null) return;
+        _countdown.Reset();
+        ScheduleCountdown();
+        RefreshCountdown();
+        StartFlip(_countdown.Digits(_clock.Elapsed.TotalMilliseconds), flipAll: false);
+    }
+
+    void OnDescriptionChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_countdown is not null) _countdown.Description = DescriptionBox.Text;
+    }
+
+    void OnDescriptionKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter) return;
+        StartCountdown();
+        e.Handled = true;
+    }
+
+    /// <summary>Wakes up when the next displayed digit of any running countdown changes.</summary>
+    void ScheduleCountdown()
+    {
+        _countdownTimer!.Stop();
+        double nowMs = _clock.Elapsed.TotalMilliseconds;
+        if (_countdowns.NextChangeMs(nowMs) is not { } next) return;
+        _countdownTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, next - nowMs + 3));
+        _countdownTimer.Start();
+    }
+
+    void OnCountdownTick()
+    {
+        double nowMs = _clock.Elapsed.TotalMilliseconds;
+        var finished = _countdowns.Update(nowMs);
+        if (_countdownMode && _countdown is not null) StartFlip(_countdown.Digits(nowMs), flipAll: false);
+        foreach (var c in finished) OnCountdownFinished(c);
+        if (finished.Count > 0) RefreshCountdown();
+        ScheduleCountdown();
+    }
+
+    void OnCountdownFinished(Countdown c)
+    {
+        // The alarm ignores "mute tick": muting is about the ticking, not about missing the end.
+        _ticks.PlayAlarm(_settings.Volume);
+        if (_windowController is { IsVisible: false })
+        {
+            string body = c.Description.Length > 0 ? c.Description : Format(c.Duration);
+            _tray?.Notify(L.CountdownFinished, body);
+        }
+        else if (c == _countdown)
+        {
+            EnterCountdown();
+        }
+    }
+
+    static string Format(TimeSpan t) => $"{(int)t.TotalHours:00}:{t.Minutes:00}:{t.Seconds:00}";
+
+    /// <summary>Syncs buttons, arrows, description and blinking with the state of the shown countdown.</summary>
+    void RefreshCountdown()
+    {
+        var state = _countdown?.State ?? CountdownState.Idle;
+        bool idle = state == CountdownState.Idle;
+        StartButton.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
+        StartButton.IsEnabled = _countdown is { CanStart: true };
+        ResetButton.Visibility = idle ? Visibility.Collapsed : Visibility.Visible;
+        PauseButton.Visibility = state is CountdownState.Running or CountdownState.Paused ? Visibility.Visible : Visibility.Collapsed;
+        bool paused = state == CountdownState.Paused;
+        PauseIcon.Glyph = paused ? "" : "";
+        PauseLabel.Text = paused ? L.Continue : L.Pause;
+        AutomationProperties.SetName(PauseButton, PauseLabel.Text);
+
+        string description = _countdown?.Description ?? "";
+        DescriptionBox.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
+        DescriptionText.Text = description;
+        DescriptionText.Visibility = !idle && description.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        ArrowCanvas.Visibility = idle && _countdownLayout is { ArrowsFit: true } ? Visibility.Visible : Visibility.Collapsed;
+        PlaceHighlight();
+
+        bool blink = _countdownMode && state == CountdownState.Finished;
+        if (blink && !_blinkTimer!.IsRunning) _blinkTimer.Start();
+        if (!blink && _blinkTimer!.IsRunning)
+        {
+            _blinkTimer.Stop();
+            _blinkOff = false;
+            RequestRender();
+        }
+    }
+
+    void BuildArrows()
+    {
+        for (int i = 0; i < ClockDigits.Count; i++)
+        {
+            _upArrows[i] = CreateArrow(i, +1);
+            _downArrows[i] = CreateArrow(i, -1);
+        }
+    }
+
+    RepeatButton CreateArrow(int tile, int delta)
+    {
+        var triangle = new Polygon
+        {
+            // Unit triangle, stretched to the button: pointing up or down.
+            Points = delta > 0 ? [new(0, 1), new(0.5, 0), new(1, 1)] : [new(0, 0), new(0.5, 1), new(1, 0)],
+            Stretch = Stretch.Fill,
+        };
+        var button = new RepeatButton
+        {
+            Content = triangle,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(6),
+            Delay = 400,
+            Interval = 110,
+            IsTabStop = false,
+        };
+        AutomationProperties.SetName(button, $"{(delta > 0 ? L.DigitUp : L.DigitDown)} {tile + 1}");
+        button.Click += (_, _) => StepTile(tile, delta);
+        ArrowCanvas.Children.Add(button);
+        return button;
+    }
+
+    void StepTile(int tile, int delta)
+    {
+        if (_countdown is not { State: CountdownState.Idle }) return;
+        _countdown.StepDigit(tile, delta);
+        StartFlip(_countdown.Digits(_clock.Elapsed.TotalMilliseconds), flipAll: false);
+        RefreshCountdown();
+    }
+
+    /// <summary>Places arrows, description and controls around the tiles, with a margin wide enough for the arrows.</summary>
+    void LayoutCountdown()
+    {
+        if (!_countdownMode) return;
+        double w = ClockArea.ActualWidth, h = ClockArea.ActualHeight;
+        if (w <= 0 || h <= 0) return;
+        var s = _settings;
+        var l = CountdownLayout.Compute(w, h, s.Margin, s.SecondsScale, s.DateSize);
+        _countdownLayout = l;
+        var color = Windows.UI.Color.FromArgb(255, s.DateColor.R, s.DateColor.G, s.DateColor.B);
+
+        double size = l.ArrowSize;
+        for (int i = 0; i < ClockDigits.Count; i++)
+        {
+            var tile = l.Clock.Tiles[i];
+            PlaceArrow(_upArrows[i], tile.CenterX, tile.Y - size * 0.75, size, color);
+            PlaceArrow(_downArrows[i], tile.CenterX, tile.Bottom + size * 0.75, size, color);
+        }
+
+        double band = l.ArrowsFit ? size * 1.5 : 0;
+        DescriptionHost.Height = Math.Max(0, 2 * l.DescriptionCenterY);
+        DescriptionHost.MaxWidth = Math.Max(0, w - 2 * (TopButtons.Margin.Right + TopButtons.ActualWidth + 8));
+        ControlsHost.Margin = new Thickness(0, l.Clock.Tiles[0].Bottom + band, 0, 0);
+        ControlsHost.Height = Math.Max(0, h - l.Clock.Tiles[0].Bottom - band);
+
+        // The description reads like the date: same font, weight, color and size.
+        var font = new FontFamily(s.DateFontFamily);
+        var weight = new FontWeight((ushort)s.DateFontWeight);
+        DescriptionText.FontFamily = DescriptionBox.FontFamily = font;
+        DescriptionText.FontWeight = DescriptionBox.FontWeight = weight;
+        DescriptionText.FontSize = DescriptionBox.FontSize = l.TextFontSize;
+        DescriptionBox.MinWidth = l.TextFontSize * 10;
+        DescriptionText.Foreground = new SolidColorBrush(color);
+        foreach (var key in new[] { "TextControlForeground", "TextControlForegroundPointerOver", "TextControlForegroundFocused" })
+            ((SolidColorBrush)DescriptionBox.Resources[key]).Color = color;
+        TileHighlight.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(160, color.R, color.G, color.B));
+
+        RefreshCountdown();
+        RequestRender();
+    }
+
+    static void PlaceArrow(RepeatButton button, double centerX, double centerY, double size, Windows.UI.Color color)
+    {
+        button.Width = size * 1.8;
+        button.Height = size * 1.3;
+        var triangle = (Polygon)button.Content;
+        triangle.Width = size;
+        triangle.Height = size * 0.6;
+        triangle.Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(200, color.R, color.G, color.B));
+        Canvas.SetLeft(button, centerX - button.Width / 2);
+        Canvas.SetTop(button, centerY - button.Height / 2);
+    }
+
+    /// <summary>Outlines the tile the keyboard edits; shown only while setting the countdown.</summary>
+    void PlaceHighlight()
+    {
+        if (_selectedTile < 0 || _countdownLayout is null || _countdown is not { State: CountdownState.Idle })
+        {
+            TileHighlight.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var tile = _countdownLayout.Clock.Tiles[_selectedTile];
+        const double Pad = 5;
+        TileHighlight.Margin = new Thickness(tile.X - Pad, tile.Y - Pad, 0, 0);
+        TileHighlight.Width = tile.Width + 2 * Pad;
+        TileHighlight.Height = tile.Height + 2 * Pad;
+        TileHighlight.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>The tile under a point, arrow bands included, or -1.</summary>
+    int TileAt(Windows.Foundation.Point p)
+    {
+        if (_countdownLayout is not { } l) return -1;
+        double band = l.ArrowSize * 1.5;
+        for (int i = 0; i < ClockDigits.Count; i++)
+        {
+            var t = l.Clock.Tiles[i];
+            if (p.X >= t.X && p.X <= t.Right && p.Y >= t.Y - band && p.Y <= t.Bottom + band) return i;
+        }
+        return -1;
+    }
+
+    void OnClockWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_countdownMode || _countdown is not { State: CountdownState.Idle }) return;
+        var point = e.GetCurrentPoint(ClockArea);
+        int tile = TileAt(point.Position);
+        if (tile < 0) return;
+        _selectedTile = tile;
+        StepTile(tile, Math.Sign(point.Properties.MouseWheelDelta));
+        e.Handled = true;
+    }
+
+    void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!_countdownMode || _countdown is not { State: CountdownState.Idle }) return;
+        if (e.OriginalSource is TextBox) return;
+        switch (e.Key)
+        {
+            case VirtualKey.Left:
+                _selectedTile = _selectedTile < 0 ? ClockDigits.Count - 1 : Math.Max(0, _selectedTile - 1);
+                PlaceHighlight();
+                break;
+            case VirtualKey.Right:
+                _selectedTile = _selectedTile < 0 ? ClockDigits.Count - 1 : Math.Min(ClockDigits.Count - 1, _selectedTile + 1);
+                PlaceHighlight();
+                break;
+            case VirtualKey.Up or VirtualKey.Down:
+                if (_selectedTile < 0) _selectedTile = ClockDigits.Count - 1;
+                StepTile(_selectedTile, e.Key == VirtualKey.Up ? 1 : -1);
+                break;
+            default:
+                return;
+        }
+        e.Handled = true;
     }
 
     // ---------------------------------------------------------------- input
@@ -398,6 +740,10 @@ public sealed partial class MainWindow : Window
             ClosePanel();
             return;
         }
+
+        // Clicking the clock takes focus off the description, so the arrow keys edit the digits.
+        if (_countdownMode && DescriptionBox.FocusState != FocusState.Unfocused)
+            CountdownButton.Focus(FocusState.Programmatic);
 
         var wc = _windowController!;
         if (wc.IsBorderless && !wc.IsFullscreen)
@@ -448,6 +794,8 @@ public sealed partial class MainWindow : Window
         SaveNow();
         _secondTimer?.Stop();
         _tickTimer?.Stop();
+        _countdownTimer?.Stop();
+        _blinkTimer?.Stop();
         if (_renderingHooked) CompositionTarget.Rendering -= OnRendering;
         _tray?.Dispose();
         _ticks.Dispose();

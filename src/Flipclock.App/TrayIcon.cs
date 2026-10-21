@@ -14,6 +14,7 @@ public sealed class TrayIcon : IDisposable
 
     public event Action<bool>? MuteChanged;
     public event Action? SettingsRequested;
+    public event Action? CountdownRequested;
     public event Action? ExitRequested;
 
     public TrayIcon(WindowController window, Window owner)
@@ -31,6 +32,7 @@ public sealed class TrayIcon : IDisposable
             Items =
             {
                 new MenuFlyoutItem { Text = L.TrayShowHide, Command = new Command(window.ToggleVisibility) },
+                new MenuFlyoutItem { Text = L.Countdown, Command = new Command(() => CountdownRequested?.Invoke()) },
                 new MenuFlyoutItem { Text = L.Settings, Command = new Command(() => SettingsRequested?.Invoke()) },
                 new MenuFlyoutSeparator(),
                 _alwaysOnTop,
@@ -60,6 +62,9 @@ public sealed class TrayIcon : IDisposable
         _borderless.IsChecked = _window.IsBorderless;
         _mute.IsChecked = !soundEnabled;
     }
+
+    /// <summary>A notification balloon, silent: the caller plays its own sound.</summary>
+    public void Notify(string title, string message) => _icon.ShowNotification(title, message, sound: false);
 
     public void Dispose() => _icon.Dispose();
 
