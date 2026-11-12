@@ -50,6 +50,10 @@ internal static class SettingsSchema
         Double("date", "size", s => s.DateSize, (s, v) => s.DateSize = v, 0.5, 3.0),
         Enum<DateLanguage>("date", "language", s => s.DateLanguage, (s, v) => s.DateLanguage = v),
 
+        Bool("battery", "visible", s => s.BatteryVisible, (s, v) => s.BatteryVisible = v),
+        Enum<BatteryPosition>("battery", "position", s => s.BatteryPosition, (s, v) => s.BatteryPosition = v),
+        Double("battery", "size", s => s.BatterySize, (s, v) => s.BatterySize = v, 0.5, 3.0),
+
         OptionalInt("window", "x", s => s.WindowX, (s, v) => s.WindowX = v),
         OptionalInt("window", "y", s => s.WindowY, (s, v) => s.WindowY = v),
         Int("window", "width", s => s.WindowWidth, (s, v) => s.WindowWidth = v, 480, 16384),

@@ -22,9 +22,25 @@
             <SwapChainPanel x:Name="ClockPanel" SizeChanged="OnPanelSizeChanged" CompositionScaleChanged="OnCompositionScaleChanged" />
 
             <!-- Transparent layer that receives clicks over the clock (drag / double-click). -->
-            <Grid x:Name="InputLayer" Background="Transparent" DoubleTapped="OnInputDoubleTapped" />
+            <Grid x:Name="InputLayer" Background="Transparent" DoubleTapped="OnInputDoubleTapped"
+                  PointerMoved="OnInputPointerMoved" PointerReleased="OnInputPointerReleased" PointerCaptureLost="OnInputPointerCaptureLost" />
 
             <TextBlock x:Name="DateText" IsHitTestVisible="False" VerticalAlignment="Top" TextWrapping="NoWrap" />
+
+            <!-- Battery: an outline whose fill follows the charge, a bolt while plugged in, the percentage below. Sized from BatteryIndicator. -->
+            <StackPanel x:Name="BatteryPanel" IsHitTestVisible="False" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Border x:Name="BatteryBody">
+                        <Grid>
+                            <Rectangle x:Name="BatteryFill" HorizontalAlignment="Left" VerticalAlignment="Stretch" />
+                            <Polygon x:Name="BatteryBolt" Points="6,0 0,9 4.5,9 3.5,16 10,6.5 5.5,6.5 7,0" Stretch="Uniform"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" StrokeLineJoin="Round" Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="BatteryCap" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock x:Name="BatteryText" HorizontalAlignment="Center" TextWrapping="NoWrap" />
+            </StackPanel>
 
             <!-- Countdown mode: arrows around the tiles, description above, controls below. Positioned from CountdownLayout. -->
             <Grid x:Name="CountdownLayer" Visibility="Collapsed">

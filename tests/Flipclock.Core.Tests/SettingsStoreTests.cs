@@ -30,6 +30,7 @@ public sealed class SettingsStoreTests : IDisposable
             SoundEnabled = false, Volume = 0.25, SoundFile = @"C:\Sounds\tick ""loud"".mp3",
             BackgroundImage = @"D:\Pictures\sky.jpg", BackgroundDim = 0.4,
             DateVisible = false, DatePosition = DatePosition.Right, DateSize = 1.75, DateLanguage = DateLanguage.Spanish,
+            BatteryVisible = false, BatteryPosition = BatteryPosition.BottomRight, BatterySize = 2.25,
             WindowX = -1500, WindowY = 40, WindowWidth = 900, WindowHeight = 600,
             Maximized = true, Fullscreen = true, Borderless = true, AlwaysOnTop = true,
         };
