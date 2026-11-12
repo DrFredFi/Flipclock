@@ -14,6 +14,7 @@ The app is built to sit on a second monitor, a TV or a corner of the desktop. Yo
 - **Authentic flip animation**: hinge rotation with bounce. When several digits change, the flips cascade from right to left.
 - **Tick sound** in time with the flap landing. A tick is built in, and you can use your own `.mp3` instead.
 - **Date line** (for example `Friday, 16 October 2026`) in Italian, English or Spanish.
+- **Battery indicator** on laptops and tablets: a battery icon in the corner of your choice, with the charge percentage below it. The fill follows the charge and turns green, yellow or red as the battery runs down. While plugged in it shows a bolt, and the fill pulses while the battery charges. On computers without a battery it does not appear.
 - **Any installed font** for the digits and the date, with weight selection.
 - **Background image** (fill and crop) with an optional dim. The tiles cast shadows onto it.
 - **Window modes**: normal, fullscreen, borderless (drag anywhere to move) and always-on-top.
@@ -48,6 +49,9 @@ Open the settings panel with the **cog button** in the top-right corner, which f
 | | Position | bottom left / center / right | center |
 | | Size multiplier | 0.5–3× | 1× |
 | | Language | Italian, English, Spanish | Italian |
+| **Battery** | Visible (only if the computer has a battery) | on/off | on |
+| | Position | top left / top right / bottom left / bottom right | top left |
+| | Size multiplier | 0.5–3× | 1× |
 | **Window** | Always on top, borderless, fullscreen | on/off | off |
 
 The panel also has **Test tick**, **Test flip** and **Reset to defaults** buttons.
@@ -65,7 +69,7 @@ The panel also has **Test tick**, **Test flip** and **Reset to defaults** button
 
 ### Configuration file
 
-Settings are stored in `config.toml` next to `Flipclock.exe`, grouped into readable sections (`[clock]`, `[colors]`, `[fonts]`, `[lighting]`, `[animation]`, `[sound]`, `[background]`, `[date]`, `[window]`). You can edit the file by hand while the app is closed:
+Settings are stored in `config.toml` next to `Flipclock.exe`, grouped into readable sections (`[clock]`, `[colors]`, `[fonts]`, `[lighting]`, `[animation]`, `[sound]`, `[background]`, `[date]`, `[battery]`, `[window]`). You can edit the file by hand while the app is closed:
 
 ```toml
 [colors]
@@ -149,7 +153,7 @@ dotnet test tests/Flipclock.Core.Tests
 Flipclock.slnx
 ├─ src/
 │  ├─ Flipclock.Core/        UI-independent logic
-│  │   ├─ Clock/             digit diffing, flip animator, layout math, date formatting
+│  │   ├─ Clock/             digit diffing, flip animator, layout math, date formatting, battery indicator
 │  │   └─ Settings/          settings model, TOML schema and validation, load/save
 │  ├─ Flipclock.Rendering/   Direct3D 11 renderer
 │  │   ├─ ClockRenderer.cs   device, swap chain, shadow map, MSAA, draw passes
