@@ -108,6 +108,14 @@
                 <Slider x:Name="DateSizeSlider" Header="{x:Bind L.DateSize}" Minimum="50" Maximum="300" StepFrequency="5" ValueChanged="OnSliderChanged" Margin="0,8,0,0" />
                 <ComboBox x:Name="DateLanguageBox" Header="{x:Bind L.DateLanguage}" HorizontalAlignment="Stretch" SelectionChanged="OnComboChanged" />
 
+                <!-- Battery -->
+                <TextBlock Text="{x:Bind L.SectionBattery}" Style="{StaticResource SectionHeader}" />
+                <TextBlock x:Name="NoBatteryText" Text="{x:Bind L.NoBattery}" Style="{StaticResource CaptionTextBlockStyle}" Opacity="0.8"
+                           TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed" />
+                <ToggleSwitch x:Name="BatteryVisibleSwitch" Header="{x:Bind L.ShowBattery}" Toggled="OnToggled" />
+                <ComboBox x:Name="BatteryPositionBox" Header="{x:Bind L.Position}" HorizontalAlignment="Stretch" SelectionChanged="OnComboChanged" />
+                <Slider x:Name="BatterySizeSlider" Header="{x:Bind L.DateSize}" Minimum="50" Maximum="300" StepFrequency="5" ValueChanged="OnSliderChanged" Margin="0,8,0,0" />
+
                 <!-- Window -->
                 <TextBlock Text="{x:Bind L.SectionWindow}" Style="{StaticResource SectionHeader}" />
                 <ToggleSwitch x:Name="AlwaysOnTopSwitch" Header="{x:Bind L.AlwaysOnTop}" Toggled="OnToggled" />

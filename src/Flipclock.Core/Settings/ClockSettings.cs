@@ -4,6 +4,8 @@ public enum DatePosition { Left, Center, Right }
 
 public enum DateLanguage { Italian, English, Spanish }
 
+public enum BatteryPosition { TopLeft, TopRight, BottomLeft, BottomRight }
+
 /// <summary>
 /// Every user-customizable option. Defaults here are the factory defaults;
 /// ranges are enforced by <see cref="SettingsSchema"/> when loading.
@@ -50,6 +52,11 @@ public sealed class ClockSettings
     public DatePosition DatePosition { get; set; } = DatePosition.Center;
     public double DateSize { get; set; } = 1.0;
     public DateLanguage DateLanguage { get; set; } = DateLanguage.Italian;
+
+    // [battery] — shown only on computers that have a battery.
+    public bool BatteryVisible { get; set; } = true;
+    public BatteryPosition BatteryPosition { get; set; } = BatteryPosition.TopLeft;
+    public double BatterySize { get; set; } = 1.0;
 
     // [window]
     public int? WindowX { get; set; }

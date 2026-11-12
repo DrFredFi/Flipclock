@@ -8,9 +8,7 @@ internal static partial class Native
 {
     public const uint WM_GETMINMAXINFO = 0x0024;
     public const uint WM_SYSCOMMAND = 0x0112;
-    public const uint WM_NCLBUTTONDOWN = 0x00A1;
     public const int SC_MINIMIZE = 0xF020;
-    public const int HTCAPTION = 2;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
@@ -36,10 +34,7 @@ internal static partial class Native
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ReleaseCapture();
-
-    [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
-    public static partial nint SendMessage(nint hwnd, uint msg, nint wParam, nint lParam);
+    public static partial bool GetCursorPos(out POINT point);
 
     [LibraryImport("user32.dll")]
     public static partial uint GetDpiForWindow(nint hwnd);

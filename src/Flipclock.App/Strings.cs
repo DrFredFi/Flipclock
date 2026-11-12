@@ -62,6 +62,14 @@ public sealed class Strings
     public required string LanguageEnglish { get; init; }
     public required string LanguageSpanish { get; init; }
 
+    public required string SectionBattery { get; init; }
+    public required string ShowBattery { get; init; }
+    public required string NoBattery { get; init; }
+    public required string TopLeft { get; init; }
+    public required string TopRight { get; init; }
+    public required string BottomLeft { get; init; }
+    public required string BottomRight { get; init; }
+
     public required string SectionWindow { get; init; }
     public required string AlwaysOnTop { get; init; }
     public required string Borderless { get; init; }
@@ -115,6 +123,8 @@ public sealed class Strings
         SectionBackground = "Background", BackgroundImage = "Image", NoImage = "No image", Dim = "Dim",
         SectionDate = "Date", ShowDate = "Show date", Position = "Position", Left = "Left", Center = "Center", Right = "Right",
         DateSize = "Size", DateLanguage = "Language", LanguageItalian = "Italiano", LanguageEnglish = "English", LanguageSpanish = "Español",
+        SectionBattery = "Battery", ShowBattery = "Show battery", NoBattery = "No battery detected on this computer.",
+        TopLeft = "Top left", TopRight = "Top right", BottomLeft = "Bottom left", BottomRight = "Bottom right",
         SectionWindow = "Window", AlwaysOnTop = "Always on top", Borderless = "Borderless (Ctrl+B)", Fullscreen = "Fullscreen (F11)",
         Browse = "Browse…", Clear = "Clear", ResetDefaults = "Reset to defaults",
         ResetConfirmTitle = "Reset to defaults?", ResetConfirmBody = "All appearance, sound and animation settings return to their defaults.",
@@ -141,6 +151,8 @@ public sealed class Strings
         SectionBackground = "Sfondo", BackgroundImage = "Immagine", NoImage = "Nessuna immagine", Dim = "Oscuramento",
         SectionDate = "Data", ShowDate = "Mostra data", Position = "Posizione", Left = "Sinistra", Center = "Centro", Right = "Destra",
         DateSize = "Dimensione", DateLanguage = "Lingua", LanguageItalian = "Italiano", LanguageEnglish = "English", LanguageSpanish = "Español",
+        SectionBattery = "Batteria", ShowBattery = "Mostra batteria", NoBattery = "Nessuna batteria rilevata su questo computer.",
+        TopLeft = "In alto a sinistra", TopRight = "In alto a destra", BottomLeft = "In basso a sinistra", BottomRight = "In basso a destra",
         SectionWindow = "Finestra", AlwaysOnTop = "Sempre in primo piano", Borderless = "Senza bordi (Ctrl+B)", Fullscreen = "Schermo intero (F11)",
         Browse = "Sfoglia…", Clear = "Rimuovi", ResetDefaults = "Ripristina predefiniti",
         ResetConfirmTitle = "Ripristinare i predefiniti?", ResetConfirmBody = "Tutte le impostazioni di aspetto, suono e animazione tornano ai valori predefiniti.",

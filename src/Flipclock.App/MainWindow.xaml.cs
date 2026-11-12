@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.Windows.System.Power;
 using Polygon = Microsoft.UI.Xaml.Shapes.Polygon;
 using VirtualKey = Windows.System.VirtualKey;
 using Windows.UI.Text;
@@ -51,6 +52,8 @@ public sealed partial class MainWindow : Window
     Storyboard? _panelStoryboard;
     DateTime _shownDate;
     long _lastPressTicks;
+    EventHandler<object>? _powerChanged;
+    Storyboard? _chargeStoryboard;
     double _scaleX = 1, _scaleY = 1;
 
     public Strings L => Strings.Current;
@@ -124,6 +127,8 @@ public sealed partial class MainWindow : Window
         _tray.Refresh(_settings.SoundEnabled);
 
         UpdateDate();
+        WatchBattery();
+        UpdateBattery();
         Activate();
         if (!loaded.FileExisted && _writable) SaveNow();
     }
@@ -239,6 +244,7 @@ public sealed partial class MainWindow : Window
         _scaleY = ClockPanel.CompositionScaleY;
         _renderer?.Resize((int)Math.Ceiling(ClockPanel.ActualWidth * _scaleX), (int)Math.Ceiling(ClockPanel.ActualHeight * _scaleY), (float)_scaleX, (float)_scaleY);
         UpdateDate();
+        UpdateBattery();
         LayoutCountdown();
         RenderFrame(_clock.Elapsed.TotalMilliseconds);
     }
@@ -271,6 +277,129 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    // ---------------------------------------------------------------- battery
+
+    static readonly Windows.UI.Color BatteryGreen = Windows.UI.Color.FromArgb(255, 0x34, 0xC7, 0x59);
+    static readonly Windows.UI.Color BatteryYellow = Windows.UI.Color.FromArgb(255, 0xFF, 0xCC, 0x00);
+    static readonly Windows.UI.Color BatteryRed = Windows.UI.Color.FromArgb(255, 0xFF, 0x3B, 0x30);
+
+    void WatchBattery()
+    {
+        // PowerManager raises these on a background thread.
+        _powerChanged = (_, _) => DispatcherQueue.TryEnqueue(UpdateBattery);
+        PowerManager.BatteryStatusChanged += _powerChanged;
+        PowerManager.RemainingChargePercentChanged += _powerChanged;
+        PowerManager.PowerSupplyStatusChanged += _powerChanged;
+    }
+
+    void UnwatchBattery()
+    {
+        if (_powerChanged is null) return;
+        PowerManager.BatteryStatusChanged -= _powerChanged;
+        PowerManager.RemainingChargePercentChanged -= _powerChanged;
+        PowerManager.PowerSupplyStatusChanged -= _powerChanged;
+        _powerChanged = null;
+    }
+
+    void UpdateBattery()
+    {
+        var s = _settings;
+        bool present = PowerManager.BatteryStatus != BatteryStatus.NotPresent;
+        Settings.SetBatteryAvailable(present);
+        bool visible = present && s.BatteryVisible;
+        BatteryPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible)
+        {
+            SetChargingAnimation(false);
+            return;
+        }
+
+        double w = ClockArea.ActualWidth, h = ClockArea.ActualHeight;
+        if (w <= 0 || h <= 0) return;
+        var layout = BatteryIndicator.Layout(w, h, s.BatterySize);
+        int percent = Math.Clamp(PowerManager.RemainingChargePercent, 0, 100);
+        bool pluggedIn = PowerManager.PowerSupplyStatus != PowerSupplyStatus.NotPresent;
+        bool charging = PowerManager.BatteryStatus == BatteryStatus.Charging;
+        var dateBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, s.DateColor.R, s.DateColor.G, s.DateColor.B));
+        double stroke = layout.Stroke;
+
+        BatteryBody.Width = layout.BodyWidth;
+        BatteryBody.Height = layout.BodyHeight;
+        BatteryBody.BorderThickness = new Thickness(stroke);
+        BatteryBody.Padding = new Thickness(stroke);
+        BatteryBody.CornerRadius = new CornerRadius(stroke * 2.5);
+        BatteryBody.BorderBrush = dateBrush;
+        BatteryCap.Width = layout.CapWidth;
+        BatteryCap.Height = layout.CapHeight;
+        BatteryCap.Margin = new Thickness(stroke * 0.6, 0, 0, 0);
+        BatteryCap.CornerRadius = new CornerRadius(0, layout.CapWidth / 2, layout.CapWidth / 2, 0);
+        BatteryCap.Background = dateBrush;
+
+        BatteryFill.Width = layout.InnerWidth * BatteryIndicator.FillFraction(percent);
+        BatteryFill.RadiusX = BatteryFill.RadiusY = stroke;
+        BatteryFill.Fill = new SolidColorBrush(BatteryIndicator.LevelFor(percent) switch
+        {
+            BatteryLevel.Low => BatteryRed,
+            BatteryLevel.Medium => BatteryYellow,
+            _ => BatteryGreen,
+        });
+
+        BatteryBolt.Visibility = pluggedIn ? Visibility.Visible : Visibility.Collapsed;
+        BatteryBolt.Height = layout.InnerHeight;
+        BatteryBolt.Fill = dateBrush;
+        BatteryBolt.Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(0xB0, 0, 0, 0));
+        BatteryBolt.StrokeThickness = Math.Max(1, stroke * 0.6);
+
+        BatteryText.Text = $"{percent}%";
+        // A plain face, not the date font: decorative date fonts make small digits unreadable.
+        BatteryText.FontFamily = new FontFamily("Segoe UI");
+        BatteryText.FontWeight = new FontWeight(600);
+        BatteryText.FontSize = layout.FontSize;
+        BatteryText.Foreground = dateBrush;
+        BatteryPanel.Spacing = layout.FontSize * 0.2;
+
+        double pad = layout.EdgePadding;
+        // Top right is shared with the countdown and settings buttons: sit below them.
+        double topPad = s.BatteryPosition == BatteryPosition.TopRight ? Math.Max(pad, TopButtons.Margin.Top + 44 + 8) : pad;
+        (BatteryPanel.HorizontalAlignment, BatteryPanel.VerticalAlignment, BatteryPanel.Margin) = s.BatteryPosition switch
+        {
+            BatteryPosition.TopRight => (HorizontalAlignment.Right, VerticalAlignment.Top, new Thickness(0, topPad, pad, 0)),
+            BatteryPosition.BottomLeft => (HorizontalAlignment.Left, VerticalAlignment.Bottom, new Thickness(pad, 0, 0, pad)),
+            BatteryPosition.BottomRight => (HorizontalAlignment.Right, VerticalAlignment.Bottom, new Thickness(0, 0, pad, pad)),
+            _ => (HorizontalAlignment.Left, VerticalAlignment.Top, new Thickness(pad, pad, 0, 0)),
+        };
+
+        SetChargingAnimation(charging);
+    }
+
+    /// <summary>While charging, the fill breathes so the charge reads as flowing in.</summary>
+    void SetChargingAnimation(bool on)
+    {
+        if (on == (_chargeStoryboard is not null)) return;
+        if (on)
+        {
+            var pulse = new DoubleAnimation
+            {
+                From = 1,
+                To = 0.35,
+                Duration = TimeSpan.FromMilliseconds(1100),
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Storyboard.SetTarget(pulse, BatteryFill);
+            Storyboard.SetTargetProperty(pulse, "Opacity");
+            _chargeStoryboard = new Storyboard { Children = { pulse } };
+            _chargeStoryboard.Begin();
+        }
+        else
+        {
+            _chargeStoryboard!.Stop();
+            _chargeStoryboard = null;
+            BatteryFill.Opacity = 1;
+        }
+    }
+
     // ---------------------------------------------------------------- settings
 
     void WireSettingsPanel()
@@ -283,7 +412,7 @@ public sealed partial class MainWindow : Window
         {
             _settings.CopyAppearanceFrom(new ClockSettings());
             Settings.Load(_settings);
-            OnSettingsChanged(SettingsChange.Layout | SettingsChange.DigitFont | SettingsChange.BackgroundImage | SettingsChange.Sound | SettingsChange.Date);
+            OnSettingsChanged(SettingsChange.Layout | SettingsChange.DigitFont | SettingsChange.BackgroundImage | SettingsChange.Sound | SettingsChange.Date | SettingsChange.Battery);
         };
         Settings.AlwaysOnTopChanged += on => _windowController!.SetAlwaysOnTop(on);
         Settings.BorderlessChanged += on => _windowController!.SetBorderless(on);
@@ -303,6 +432,9 @@ public sealed partial class MainWindow : Window
             UpdateDate();
             LayoutCountdown();
         }
+        // The battery borrows the date's color.
+        if (change.HasFlag(SettingsChange.Battery) || change.HasFlag(SettingsChange.Date))
+            UpdateBattery();
         _tray?.Refresh(_settings.SoundEnabled);
         RequestRender();
         ScheduleSave();
@@ -748,7 +880,7 @@ public sealed partial class MainWindow : Window
         var wc = _windowController!;
         if (wc.IsBorderless && !wc.IsFullscreen)
         {
-            // The move loop swallows the second click, so double-clicks are detected here.
+            // Double-clicks are detected on the press, before the second one starts another drag.
             long now = Environment.TickCount64;
             if (now - _lastPressTicks <= Native.GetDoubleClickTime())
             {
@@ -757,9 +889,19 @@ public sealed partial class MainWindow : Window
                 return;
             }
             _lastPressTicks = now;
-            wc.BeginDrag();
+            if (wc.BeginDrag()) InputLayer.CapturePointer(e.Pointer);
         }
     }
+
+    void OnInputPointerMoved(object sender, PointerRoutedEventArgs e) => _windowController?.DragTo();
+
+    void OnInputPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _windowController?.EndDrag();
+        InputLayer.ReleasePointerCapture(e.Pointer);
+    }
+
+    void OnInputPointerCaptureLost(object sender, PointerRoutedEventArgs e) => _windowController?.EndDrag();
 
     void OnInputDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
@@ -796,6 +938,8 @@ public sealed partial class MainWindow : Window
         _tickTimer?.Stop();
         _countdownTimer?.Stop();
         _blinkTimer?.Stop();
+        UnwatchBattery();
+        _chargeStoryboard?.Stop();
         if (_renderingHooked) CompositionTarget.Rendering -= OnRendering;
         _tray?.Dispose();
         _ticks.Dispose();

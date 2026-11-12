@@ -19,6 +19,7 @@ public enum SettingsChange
     BackgroundImage = 8,
     Sound = 16,
     Date = 32,
+    Battery = 64,
 }
 
 public sealed partial class SettingsPanel : UserControl
@@ -43,6 +44,7 @@ public sealed partial class SettingsPanel : UserControl
         }
         foreach (var p in new[] { L.Left, L.Center, L.Right }) DatePositionBox.Items.Add(p);
         foreach (var p in new[] { L.LanguageItalian, L.LanguageEnglish, L.LanguageSpanish }) DateLanguageBox.Items.Add(p);
+        foreach (var p in new[] { L.TopLeft, L.TopRight, L.BottomLeft, L.BottomRight }) BatteryPositionBox.Items.Add(p);
 
         SetupColor(TileColorButton, L.TileColor);
         SetupColor(DigitColorButton, L.DigitColor);
@@ -102,6 +104,9 @@ public sealed partial class SettingsPanel : UserControl
             DatePositionBox.SelectedIndex = (int)settings.DatePosition;
             DateSizeSlider.Value = settings.DateSize * 100;
             DateLanguageBox.SelectedIndex = (int)settings.DateLanguage;
+            BatteryVisibleSwitch.IsOn = settings.BatteryVisible;
+            BatteryPositionBox.SelectedIndex = (int)settings.BatteryPosition;
+            BatterySizeSlider.Value = settings.BatterySize * 100;
         }
         finally
         {
@@ -116,6 +121,13 @@ public sealed partial class SettingsPanel : UserControl
         BorderlessSwitch.IsOn = borderless;
         FullscreenSwitch.IsOn = fullscreen;
         _loading = false;
+    }
+
+    /// <summary>Without a battery the battery options are greyed out and a note explains why.</summary>
+    public void SetBatteryAvailable(bool available)
+    {
+        NoBatteryText.Visibility = available ? Visibility.Collapsed : Visibility.Visible;
+        BatteryVisibleSwitch.IsEnabled = BatteryPositionBox.IsEnabled = BatterySizeSlider.IsEnabled = available;
     }
 
     static string DisplayName(string path, string fallback) =>
@@ -199,6 +211,7 @@ public sealed partial class SettingsPanel : UserControl
             _ when sender == VolumeSlider => Set(() => s.Volume = e.NewValue / 100, SettingsChange.None),
             _ when sender == BackgroundDimSlider => Set(() => s.BackgroundDim = e.NewValue / 100, SettingsChange.Appearance),
             _ when sender == DateSizeSlider => Set(() => s.DateSize = e.NewValue / 100, SettingsChange.Date),
+            _ when sender == BatterySizeSlider => Set(() => s.BatterySize = e.NewValue / 100, SettingsChange.Battery),
             _ => SettingsChange.None,
         };
         Changed?.Invoke(change);
@@ -221,6 +234,7 @@ public sealed partial class SettingsPanel : UserControl
         else if (box == DateWeightBox) { s.DateFontWeight = Weights[box.SelectedIndex].Weight; change = SettingsChange.Date; }
         else if (box == DatePositionBox) { s.DatePosition = (DatePosition)box.SelectedIndex; change = SettingsChange.Date; }
         else if (box == DateLanguageBox) { s.DateLanguage = (DateLanguage)box.SelectedIndex; change = SettingsChange.Date; }
+        else if (box == BatteryPositionBox) { s.BatteryPosition = (BatteryPosition)box.SelectedIndex; change = SettingsChange.Battery; }
         else return;
         Changed?.Invoke(change);
     }
@@ -230,6 +244,7 @@ public sealed partial class SettingsPanel : UserControl
         if (_loading) return;
         if (sender == SoundEnabledSwitch) { _settings.SoundEnabled = SoundEnabledSwitch.IsOn; Changed?.Invoke(SettingsChange.None); }
         else if (sender == DateVisibleSwitch) { _settings.DateVisible = DateVisibleSwitch.IsOn; Changed?.Invoke(SettingsChange.Date); }
+        else if (sender == BatteryVisibleSwitch) { _settings.BatteryVisible = BatteryVisibleSwitch.IsOn; Changed?.Invoke(SettingsChange.Battery); }
         else if (sender == AlwaysOnTopSwitch) AlwaysOnTopChanged?.Invoke(AlwaysOnTopSwitch.IsOn);
         else if (sender == BorderlessSwitch) BorderlessChanged?.Invoke(BorderlessSwitch.IsOn);
         else if (sender == FullscreenSwitch) FullscreenChanged?.Invoke(FullscreenSwitch.IsOn);

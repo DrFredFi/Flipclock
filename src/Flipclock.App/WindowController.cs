@@ -164,12 +164,30 @@ public sealed class WindowController : IDisposable
         else Show();
     }
 
-    /// <summary>Starts a system move loop, as if the title bar had been grabbed.</summary>
-    public void BeginDrag()
+    // A borderless window is moved by hand: the system move loop (WM_NCLBUTTONDOWN + HTCAPTION) only
+    // starts once XAML lets go of the pointer, so the window would jump on release instead of following it.
+    PointInt32 _dragCursor, _dragWindow;
+    bool _dragging;
+
+    /// <summary>Starts moving the window with the cursor; call <see cref="DragTo"/> while the button is held.</summary>
+    public bool BeginDrag()
     {
-        Native.ReleaseCapture();
-        Native.SendMessage(Hwnd, Native.WM_NCLBUTTONDOWN, Native.HTCAPTION, 0);
+        if (_overlapped.State != OverlappedPresenterState.Restored || !Native.GetCursorPos(out var cursor)) return false;
+        _dragCursor = new PointInt32(cursor.X, cursor.Y);
+        _dragWindow = _appWindow.Position;
+        _dragging = true;
+        return true;
     }
+
+    /// <summary>Moves the window so it keeps the same offset from the cursor as when the drag began.</summary>
+    public void DragTo()
+    {
+        if (!_dragging || !Native.GetCursorPos(out var cursor)) return;
+        var target = new PointInt32(_dragWindow.X + cursor.X - _dragCursor.X, _dragWindow.Y + cursor.Y - _dragCursor.Y);
+        if (target.X != _appWindow.Position.X || target.Y != _appWindow.Position.Y) _appWindow.Move(target);
+    }
+
+    public void EndDrag() => _dragging = false;
 
     void OnChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
