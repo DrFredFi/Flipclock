@@ -4,7 +4,7 @@ A realistic 3D split-flap desktop clock for Windows.
 
 ## Stack
 
-- .NET 10, WinUI 3, **unpackaged**, shipped as a self-contained folder (zip). Single-file publish is optional — dropped if it causes friction.
+- .NET 11, WinUI 3, **unpackaged**, shipped as a self-contained folder (zip). Single-file publish is optional — dropped if it causes friction.
 - Direct3D 11 via **Vortice.Windows**, rendered into a WinUI `SwapChainPanel`.
 - **SkiaSharp** for rasterizing digit glyphs to textures.
 - **Tomlyn** for TOML config.
