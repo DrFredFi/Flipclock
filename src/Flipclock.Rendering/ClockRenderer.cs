@@ -22,6 +22,7 @@ public sealed class ClockRenderer : IDisposable
     const float SplitGap = 0.016f;
     const float SlabDepth = 0.11f;
     const float FlapDepth = 0.016f;
+    const float CardInset = 0.0015f; // resting cards sit this far behind the flap to avoid z-fighting
     const float CornerRadius = 0.075f;
     const float Bevel = 0.02f;
     const float AxleRadius = 0.02f;
@@ -171,7 +172,7 @@ public sealed class ClockRenderer : IDisposable
 
         _topHalf = Upload(MeshData.HalfTile(TileHeight, SplitGap, 0, SlabDepth, CornerRadius, Bevel, top: true));
         _bottomHalf = Upload(MeshData.HalfTile(TileHeight, SplitGap, 0, SlabDepth, CornerRadius, Bevel, top: false));
-        _flap = Upload(MeshData.HalfTile(TileHeight, SplitGap, SlabDepth, SlabDepth + FlapDepth, CornerRadius, Bevel, top: true));
+        _flap = Upload(MeshData.HalfTile(TileHeight, SplitGap, SlabDepth, SlabDepth + FlapDepth, CornerRadius, Bevel, top: true, bevelBack: true));
         _sphere = Upload(MeshData.Sphere());
         _axle = Upload(MeshData.CylinderX());
         _quad = Upload(MeshData.Quad());
@@ -502,18 +503,22 @@ public sealed class ClockRenderer : IDisposable
             float w = (float)rect.Width;
             var placement = Matrix4x4.CreateScale(w) * Matrix4x4.CreateTranslation((float)rect.CenterX - W / 2, H / 2 - (float)rect.CenterY, 0);
 
-            _draws.Add(new DrawItem(_topHalf, placement, tileColor, new Vector4(roughness, 0, v.StaticTopDigit, -1)));
-            _draws.Add(new DrawItem(_bottomHalf, placement, tileColor, new Vector4(roughness, 0, v.StaticBottomDigit, -1)));
+            _draws.Add(new DrawItem(_topHalf, placement, tileColor, new Vector4(roughness, 0, -1, -1)));
+            _draws.Add(new DrawItem(_bottomHalf, placement, tileColor, new Vector4(roughness, 0, -1, -1)));
             _draws.Add(new DrawItem(_axle,
                 Matrix4x4.CreateScale(1.035f, AxleRadius, AxleRadius) * Matrix4x4.CreateTranslation(0, 0, SlabDepth * 0.5f) * placement,
                 axleColor, new Vector4(0.4f, 1, -1, -1)));
 
+            // The resting digits are shown on cards shaped exactly like the moving flap (the bottom one is a
+            // flap lying flat), a hair behind it: when the flap lands and disappears, nothing jumps.
+            var rest = Matrix4x4.CreateTranslation(0, 0, -CardInset) * placement;
+            _draws.Add(new DrawItem(_flap, rest, tileColor, new Vector4(roughness, 0, v.StaticTopDigit, -1)));
+            _draws.Add(new DrawItem(_flap, FlapRotation(MathF.PI) * rest, tileColor, new Vector4(roughness, 0, -1, v.StaticBottomDigit)));
+
             if (v.FlapVisible)
             {
-                float pivotZ = SlabDepth + FlapDepth / 2;
                 float angle = (float)(v.FlapAngle * Math.PI / 180);
-                var flap = Matrix4x4.CreateTranslation(0, 0, -pivotZ) * Matrix4x4.CreateRotationX(angle) * Matrix4x4.CreateTranslation(0, 0, pivotZ);
-                _draws.Add(new DrawItem(_flap, flap * placement, tileColor, new Vector4(roughness, 0, v.FlapFrontDigit, v.FlapBackDigit)));
+                _draws.Add(new DrawItem(_flap, FlapRotation(angle) * placement, tileColor, new Vector4(roughness, 0, v.FlapFrontDigit, v.FlapBackDigit)));
             }
         }
 
@@ -545,6 +550,13 @@ public sealed class ClockRenderer : IDisposable
         _context.IASetVertexBuffer(0, item.Mesh.Vertices, Vertex.Stride);
         _context.IASetIndexBuffer(item.Mesh.Indices, Format.R32_UInt, 0);
         _context.DrawIndexed(item.Mesh.IndexCount, 0, 0);
+    }
+
+    /// <summary>Turns a flap around its hinge (at y = 0, in the middle of its thickness).</summary>
+    static Matrix4x4 FlapRotation(float angle)
+    {
+        const float pivotZ = SlabDepth + FlapDepth / 2;
+        return Matrix4x4.CreateTranslation(0, 0, -pivotZ) * Matrix4x4.CreateRotationX(angle) * Matrix4x4.CreateTranslation(0, 0, pivotZ);
     }
 
     static Vector4 Linear(RgbColor c) => new(ToLinear(c.R), ToLinear(c.G), ToLinear(c.B), 1);
