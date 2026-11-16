@@ -95,7 +95,7 @@ The app is forgiving about mistakes in this file:
 
 - Windows 10 version 1809 or later, or Windows 11 (x64 or ARM64)
 - A Direct3D 11 GPU. Without one, the app falls back to the WARP software renderer.
-- To build: the [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- To build: the [.NET 11 SDK](https://dotnet.microsoft.com/download)
 
 ### Build and run
 
@@ -105,7 +105,7 @@ cd Flipclock
 dotnet build src/Flipclock.App/Flipclock.App.csproj -c Release -p:Platform=x64
 ```
 
-The executable is written to `src/Flipclock.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Flipclock.exe`.
+The executable is written to `src/Flipclock.App/bin/x64/Release/net11.0-windows10.0.19041.0/win-x64/Flipclock.exe`.
 
 ### Publish a portable folder
 
@@ -137,7 +137,7 @@ dotnet test tests/Flipclock.Core.Tests
 
 | Technology | What it is used for |
 |---|---|
-| **.NET 10 / C#** | The whole application. |
+| **.NET 11 / C#** | The whole application. |
 | **WinUI 3 (Windows App SDK)** | Window, settings panel, info bars and window modes (through `AppWindow` and `OverlappedPresenter`). The app is unpackaged and self-contained. |
 | **Direct3D 11** via [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) | The 3D renderer. Frames go into a composition swap chain hosted in a WinUI `SwapChainPanel`. HLSL shaders are compiled at startup with the D3D compiler. |
 | **HLSL** | One shader file with PBR-style shading for the tiles, a depth-only pass for shadows, and the background pass (solid color or image with dim). |
