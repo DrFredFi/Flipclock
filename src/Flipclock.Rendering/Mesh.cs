@@ -36,12 +36,12 @@ internal sealed class MeshData
     /// <summary>
     /// One half of a split-flap tile in unit space: tile width 1, centered on x = 0, the hinge at y = 0.
     /// The top half spans y ∈ [gap/2, height/2]; the bottom half the mirror image. The outer corners are
-    /// rounded with <paramref name="cornerRadius"/>, all edges are bevelled, and the slab runs from
-    /// <paramref name="zBack"/> to <paramref name="zFront"/>.
+    /// rounded with <paramref name="cornerRadius"/>, the front edges are bevelled (the back ones too with
+    /// <paramref name="bevelBack"/>), and the slab runs from <paramref name="zBack"/> to <paramref name="zFront"/>.
     /// Front-face UVs map to the full-tile glyph; back-face UVs map to the glyph's opposite half as seen
     /// after the flap has rotated 180° around the hinge.
     /// </summary>
-    public static MeshData HalfTile(float height, float gap, float zBack, float zFront, float cornerRadius, float bevel, bool top, int cornerSegments = 10)
+    public static MeshData HalfTile(float height, float gap, float zBack, float zFront, float cornerRadius, float bevel, bool top, bool bevelBack = false, int cornerSegments = 10)
     {
         var mesh = new MeshData();
         bevel = MathF.Min(bevel, (zFront - zBack) * 0.45f);
@@ -118,6 +118,7 @@ internal sealed class MeshData
 
         // Side wall.
         float sideTop = zFront - bevel;
+        float sideBottom = bevelBack ? zBack + bevel : zBack;
         var wallTop = new uint[n];
         var wallBottom = new uint[n];
         for (int i = 0; i < n; i++)
@@ -125,17 +126,41 @@ internal sealed class MeshData
             var p = Ring(i, 0);
             var normal = new Vector3(dirs[i], 0);
             wallTop[i] = mesh.Add(new Vertex(new Vector3(p, sideTop), normal, Vector2.Zero, FaceKind.Edge));
-            wallBottom[i] = mesh.Add(new Vertex(new Vector3(p, zBack), normal, Vector2.Zero, FaceKind.Edge));
+            wallBottom[i] = mesh.Add(new Vertex(new Vector3(p, sideBottom), normal, Vector2.Zero, FaceKind.Edge));
         }
         for (int i = 0; i < n; i++)
             mesh.Quad(wallTop[i], wallTop[(i + 1) % n], wallBottom[(i + 1) % n], wallBottom[i]);
 
+        // Back bevel: the mirror image of the front one, so a flap seen from behind has the same edges.
+        if (bevelBack)
+        {
+            for (int step = 0; step <= bevelSteps; step++)
+            {
+                float t = (float)step / bevelSteps;
+                float angle = t * MathF.PI / 2;
+                float inset = bevel * (1 - MathF.Sin(angle));
+                float z = zBack + bevel * (1 - MathF.Cos(angle));
+                var current = new uint[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var p = Ring(i, inset);
+                    var normal = Vector3.Normalize(new Vector3(dirs[i] * MathF.Sin(angle), -MathF.Cos(angle)));
+                    current[i] = mesh.Add(new Vertex(new Vector3(p, z), normal, BackUv(p), FaceKind.Edge));
+                }
+                if (step > 0)
+                    for (int i = 0; i < n; i++)
+                        mesh.Quad(previous[i], current[i], current[(i + 1) % n], previous[(i + 1) % n]);
+                previous = current;
+            }
+        }
+
         // Back face.
+        float backInset = bevelBack ? bevel : 0;
         uint bc = mesh.Add(new Vertex(new Vector3(centroid, zBack), -Vector3.UnitZ, BackUv(centroid), FaceKind.Back));
         uint backStart = (uint)mesh.Vertices.Count;
         for (int i = 0; i < n; i++)
         {
-            var p = Ring(i, 0);
+            var p = Ring(i, backInset);
             mesh.Add(new Vertex(new Vector3(p, zBack), -Vector3.UnitZ, BackUv(p), FaceKind.Back));
         }
         for (int i = 0; i < n; i++)
